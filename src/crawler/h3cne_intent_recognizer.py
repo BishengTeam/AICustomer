@@ -6,6 +6,19 @@ def contains_any(text: str, keywords: List[str]) -> bool:
     return any(k in text for k in keywords)
 
 
+def is_high_risk_refuse_query(text: str) -> bool:
+    normalized = re.sub(r"\s+", "", (text or "").lower())
+    patterns = [
+        # 承诺通过类
+        r"包过|保过|稳过|一次过|一次就过|包通过|保通过",
+        r"保证.*过|保证通过",
+        # 试题泄露/押题类
+        r"押题|押中|预测题|预测.*题|真题|原题|题库|题库答案|泄题|透题",
+        r"考前密卷|内部题|内部答案",
+    ]
+    return any(re.search(p, normalized) for p in patterns)
+
+
 def extract_cert_name(text: str) -> str:
     t = text.upper()
 
@@ -21,17 +34,8 @@ def extract_cert_name(text: str) -> str:
 
 
 def extract_question_type(text: str) -> str:
-    if contains_any(text, ["包过", "保证通过", "一次过", "押题", "预测题", "真题", "题库答案", "搞定证书"]):
+    if is_high_risk_refuse_query(text):
         return "high_risk_refuse"
-
-    if contains_any(text, ["是什么", "是干嘛的", "介绍", "有啥用", "有没有用", "适合什么人", "适合谁", "适合人群"]):
-        return "intro"
-
-    if contains_any(text, ["前置", "报考条件", "报名条件", "能不能考", "能报吗", "我能报吗", "零基础", "基础要求"]):
-        return "prerequisite"
-
-    if contains_any(text, ["课程", "培训", "学什么", "学习路径", "怎么学", "先学啥"]):
-        return "training"
 
     if contains_any(text, ["考试代码", "考什么", "考试内容", "考哪些", "科目", "题型"]):
         return "exam"
@@ -42,14 +46,23 @@ def extract_question_type(text: str) -> str:
     if contains_any(text, ["成绩", "查分", "分数", "多久出分", "成绩查询"]):
         return "score"
 
-    if contains_any(text, ["证书", "领证", "下载证书", "证书发放", "证书查询"]):
-        return "certificate"
-
     if contains_any(text, ["有效期", "多久过期", "过期", "续证", "重认证", "刷新有效期"]):
         return "recertification"
 
+    if contains_any(text, ["证书", "领证", "下载证书", "证书发放", "证书查询"]):
+        return "certificate"
+
+    if contains_any(text, ["前置", "报考条件", "报名条件", "能不能考", "能报吗", "我能报吗", "零基础", "基础要求"]):
+        return "prerequisite"
+
+    if contains_any(text, ["课程", "培训", "学什么", "学习路径", "怎么学", "先学啥"]):
+        return "training"
+
     if contains_any(text, ["适合考哪个证", "推荐哪个证", "考哪个", "怎么选认证"]):
         return "recommendation"
+
+    if contains_any(text, ["是什么", "是干嘛的", "介绍", "有啥用", "有没有用", "适合什么人", "适合谁", "适合人群"]):
+        return "intro"
 
     return "unknown"
 
