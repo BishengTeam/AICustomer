@@ -9,4 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
+# Local test artifacts
+src/crawler/tmp/
+
 H3C_AI_Customer_Service_AB_Plan.md
