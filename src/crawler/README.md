@@ -2,15 +2,15 @@
 
 ## Files
 - `dify_spider.py`: 批量请求 Dify API（每题多次）
-- `dify_cases_example.csv`: 输入样例
+- `h3cne_test_cases_v1.csv`: 输入样例
 
 ## Run
 ```bash
 python src/crawler/dify_spider.py \
-  --input src/crawler/dify_cases_example.csv \
+  --input src/crawler/h3cne_test_cases_v1.csv \
   --output src/crawler/tmp/dify_result.json \
-  --base-url http://192.168.1.150/v1 \
-  --api-key <YOUR_API_KEY> \
+  --base-url [YOUR_BASE_URL] \
+  --api-key [<YOUR_API_KEY>] \
   --api-type workflow \
   --times 3
 ```

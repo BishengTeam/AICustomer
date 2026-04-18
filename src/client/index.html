@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -8,16 +8,41 @@
   </head>
   <body>
     <main class="container">
-      <section class="card">
-        <h1>AI 客服</h1>
+      <section class="card chat-shell">
+        <header class="chat-header">
+          <div>
+            <p class="eyebrow">智能问答</p>
+            <h1>AI 客服</h1>
+            <p class="subtitle">每轮提问和回答都会追加到下方会话区，方便连续查看多轮问答内容。</p>
+          </div>
+          <button id="clear" type="button" class="ghost-button">清空会话</button>
+        </header>
 
-        <label for="question" class="label">问题</label>
-        <input id="question" type="text" placeholder="请输入你的问题" />
+        <section class="conversation-panel" aria-labelledby="conversation-title">
+          <div class="panel-head">
+            <h2 id="conversation-title">会话记录</h2>
+            <span id="turn-count" class="turn-count">0 轮</span>
+          </div>
 
-        <button id="send" type="button">发送</button>
+          <div id="conversation" class="conversation" role="log" aria-live="polite" aria-relevant="additions text">
+            <div id="empty-state" class="empty-state">
+              <strong>等待开始对话</strong>
+              <p>发送问题后，这里会按时间顺序展示完整的多轮问答记录。</p>
+            </div>
+          </div>
+        </section>
 
-        <h2>回答</h2>
-        <div id="answer">回答会显示在这里</div>
+        <section class="composer-panel">
+          <label for="question" class="label">输入问题</label>
+          <div class="composer-row">
+            <textarea
+              id="question"
+              rows="3"
+              placeholder="请输入你的问题，按 Enter 发送，Shift + Enter 换行"
+            ></textarea>
+            <button id="send" type="button">发送</button>
+          </div>
+        </section>
       </section>
     </main>
 
