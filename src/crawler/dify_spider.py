@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import argparse
+import asyncio
 import csv
 import json
 import time
@@ -199,6 +200,17 @@ def call_dify(url: str, api_key: str, body: Dict[str, Any], timeout: int) -> Api
         )
 
 
+async def call_dify_async(
+    url: str,
+    api_key: str,
+    body: Dict[str, Any],
+    timeout: int,
+    semaphore: asyncio.Semaphore,
+) -> ApiResult:
+    async with semaphore:
+        return await asyncio.to_thread(call_dify, url, api_key, body, timeout)
+
+
 def build_payload(api_type: str, question: str, user: str, workflow_input_key: str) -> Dict[str, Any]:
     if api_type == "workflow":
         return {
@@ -259,6 +271,7 @@ def parse_args() -> argparse.Namespace:
         help="接口类型：chat -> /chat-messages，workflow -> /workflows/run",
     )
     parser.add_argument("--times", type=int, default=3, help="每个问题请求次数，默认 3")
+    parser.add_argument("--concurrency", type=int, default=1, help="并发请求数，默认 1（串行）")
     parser.add_argument("--timeout", type=int, default=60, help="单次请求超时（秒）")
     parser.add_argument("--delay", type=float, default=0.0, help="每次请求之间间隔（秒）")
     parser.add_argument("--user", default="batch-evaluator", help="传给 Dify 的 user 字段")
@@ -275,11 +288,53 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main() -> None:
+async def run_case(
+    idx: int,
+    case: Dict[str, str],
+    args: argparse.Namespace,
+    request_url: str,
+    semaphore: asyncio.Semaphore,
+) -> Dict[str, Any]:
+    question = case["question"]
+    intended_answer = case["intended_answer"]
+
+    attempts: List[Dict[str, Any]] = []
+    for attempt_idx in range(1, args.times + 1):
+        user_id = f"{args.user}-{idx}-{attempt_idx}-{uuid.uuid4().hex[:6]}"
+        payload = build_payload(args.api_type, question, user_id, args.workflow_input_key)
+        api_result = await call_dify_async(request_url, args.api_key, payload, args.timeout, semaphore)
+
+        attempts.append(
+            {
+                "attempt": attempt_idx,
+                "ok": api_result.ok,
+                "status_code": api_result.status_code,
+                "elapsed_ms": api_result.elapsed_ms,
+                "answer": api_result.answer,
+                "error": api_result.error,
+                "raw": api_result.raw_json,
+            }
+        )
+
+        if args.delay > 0 and attempt_idx < args.times:
+            await asyncio.sleep(args.delay)
+
+    return {
+        "index": idx,
+        "source_line": case["source_line"],
+        "question": question,
+        "intended_answer": intended_answer,
+        "attempts": attempts,
+    }
+
+
+async def async_main() -> None:
     args = parse_args()
 
     if args.times < 1:
         raise ValueError("--times 必须 >= 1")
+    if args.concurrency < 1:
+        raise ValueError("--concurrency 必须 >= 1")
 
     input_path = Path(args.input)
     output_path = Path(args.output)
@@ -293,42 +348,9 @@ def main() -> None:
     base_url = args.base_url.rstrip("/")
     request_url = f"{base_url}{endpoint}"
 
-    all_results: List[Dict[str, Any]] = []
-
-    for idx, case in enumerate(cases, start=1):
-        question = case["question"]
-        intended_answer = case["intended_answer"]
-
-        attempts: List[Dict[str, Any]] = []
-        for attempt_idx in range(1, args.times + 1):
-            user_id = f"{args.user}-{idx}-{attempt_idx}-{uuid.uuid4().hex[:6]}"
-            payload = build_payload(args.api_type, question, user_id, args.workflow_input_key)
-            api_result = call_dify(request_url, args.api_key, payload, args.timeout)
-
-            attempts.append(
-                {
-                    "attempt": attempt_idx,
-                    "ok": api_result.ok,
-                    "status_code": api_result.status_code,
-                    "elapsed_ms": api_result.elapsed_ms,
-                    "answer": api_result.answer,
-                    "error": api_result.error,
-                    "raw": api_result.raw_json,
-                }
-            )
-
-            if args.delay > 0 and attempt_idx < args.times:
-                time.sleep(args.delay)
-
-        all_results.append(
-            {
-                "index": idx,
-                "source_line": case["source_line"],
-                "question": question,
-                "intended_answer": intended_answer,
-                "attempts": attempts,
-            }
-        )
+    semaphore = asyncio.Semaphore(args.concurrency)
+    tasks = [run_case(idx, case, args, request_url, semaphore) for idx, case in enumerate(cases, start=1)]
+    all_results = await asyncio.gather(*tasks)
 
     result_doc = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -336,6 +358,7 @@ def main() -> None:
             "url": request_url,
             "api_type": args.api_type,
             "times": args.times,
+            "concurrency": args.concurrency,
             "timeout": args.timeout,
             "delay": args.delay,
             "workflow_input_key": args.workflow_input_key,
@@ -350,9 +373,13 @@ def main() -> None:
         markdown_path.parent.mkdir(parents=True, exist_ok=True)
         write_markdown(markdown_path, result_doc)
 
-    print(f"完成：共处理 {len(all_results)} 个问题，每题 {args.times} 次")
+    print(f"完成：共处理 {len(all_results)} 个问题，每题 {args.times} 次，并发数 {args.concurrency}")
     print(f"JSON 输出：{output_path}")
     print(f"Markdown 输出：{markdown_path}")
+
+
+def main() -> None:
+    asyncio.run(async_main())
 
 
 if __name__ == "__main__":

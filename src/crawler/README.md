@@ -12,8 +12,15 @@ python src/crawler/dify_spider.py \
   --base-url [YOUR_BASE_URL] \
   --api-key [<YOUR_API_KEY>] \
   --api-type workflow \
-  --times 3
+  --times 3 \
+  --concurrency 10
 ```
+
+## Concurrency
+
+- `--concurrency`：并发请求数，默认 `1`（串行）
+- 当前实现为 `asyncio` 调度 + 标准库 HTTP 调用的并发包装，不依赖额外第三方库
+- 每道题的多次请求仍按顺序执行；不同题目之间可并发执行，便于加速全量回归
 
 ## Input format
 支持 `.csv/.json/.jsonl`。

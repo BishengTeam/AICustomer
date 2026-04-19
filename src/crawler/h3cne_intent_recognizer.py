@@ -4,12 +4,21 @@ from typing import Dict, List
 TOPIC_DEFAULT_CERT = "H3CNE-RS+"
 
 
+def normalize_text(text: str) -> str:
+    return re.sub(r"\s+", "", (text or "").lower())
+
+
 def contains_any(text: str, keywords: List[str]) -> bool:
     return any(k in text for k in keywords)
 
 
+def contains_any_normalized(text: str, keywords: List[str]) -> bool:
+    normalized = normalize_text(text)
+    return any(k in normalized for k in keywords)
+
+
 def is_high_risk_refuse_query(text: str) -> bool:
-    normalized = re.sub(r"\s+", "", (text or "").lower())
+    normalized = normalize_text(text)
     patterns = [
         # 承诺通过类
         r"包过|保过|稳过|一次过|一次就过|包通过|保通过",
@@ -19,6 +28,37 @@ def is_high_risk_refuse_query(text: str) -> bool:
         r"考前密卷|内部题|内部答案",
     ]
     return any(re.search(p, normalized) for p in patterns)
+
+
+def is_value_query(text: str) -> bool:
+    return contains_any_normalized(
+        text,
+        [
+            "还有用吗",
+            "还有必要考吗",
+            "有必要考吗",
+            "值不值得考",
+            "值得考吗",
+            "还有必要学吗",
+            "有必要学吗",
+            "还有必要拿吗",
+            "有必要拿吗",
+        ],
+    )
+
+
+def should_clarify_registration_target(text: str) -> bool:
+    return contains_any_normalized(
+        text,
+        [
+            "这个怎么报名",
+            "这个怎么报",
+            "这个如何报名",
+            "这个如何报",
+            "怎么报名",
+            "怎么报",
+        ],
+    )
 
 
 def extract_cert_name(text: str) -> str:
@@ -39,20 +79,31 @@ def extract_question_type(text: str) -> str:
     if is_high_risk_refuse_query(text):
         return "high_risk_refuse"
 
-    if contains_any(text, ["考试代码", "考什么", "考试内容", "考哪些", "科目", "题型"]):
+    if is_value_query(text):
+        return "value"
+
+    if contains_any(text, ["考试代码", "考什么", "考试内容", "考哪些", "科目", "题型", "exam code", "examcode"]):
         return "exam"
 
-    if contains_any(text, ["报名", "怎么报", "去哪报", "在哪里报", "预约考试", "考试平台"]):
-        return "registration"
-
-    if contains_any(text, ["成绩", "查分", "分数", "多久出分", "成绩查询"]):
-        return "score"
-
-    if contains_any(text, ["有效期", "多久过期", "过期", "续证", "重认证", "刷新有效期"]):
-        return "recertification"
-
-    if contains_any(text, ["证书", "领证", "下载证书", "证书发放", "证书查询"]):
-        return "certificate"
+    if contains_any(
+        text,
+        [
+            "适合考哪个证",
+            "推荐哪个证",
+            "考哪个",
+            "怎么选认证",
+            "从哪个证书开始",
+            "从哪个 H3C 证书开始",
+            "从哪个认证开始",
+            "从哪个 H3C 认证开始",
+            "认证路线",
+            "路线怎么选",
+            "最适合入门",
+            "先考 H3CNE 还是别的",
+            "先考H3CNE还是别的",
+        ],
+    ):
+        return "recommendation"
 
     if contains_any(
         text,
@@ -63,12 +114,17 @@ def extract_question_type(text: str) -> str:
             "能不能考",
             "能报吗",
             "我能报吗",
+            "我能报名吗",
+            "能报名吗",
             "零基础",
             "基础要求",
             "必须培训",
+            "一定要先参加培训",
             "必须先上课",
             "培训后才能考",
             "培训后才能考试",
+            "参加培训才能考",
+            "先参加培训才能考",
             "不培训能报名",
             "自学后报名",
             "可以自学报名",
@@ -76,13 +132,54 @@ def extract_question_type(text: str) -> str:
     ):
         return "prerequisite"
 
-    if contains_any(text, ["课程", "培训", "学什么", "学习路径", "怎么学", "先学啥"]):
+    if contains_any(
+        text,
+        ["报名", "怎么报", "去哪报", "在哪里报", "预约考试", "考试平台", "报名入口", "预约平台", "在哪个平台预约", "约考"],
+    ):
+        return "registration"
+
+    if contains_any(text, ["成绩", "查分", "分数", "多久出分", "成绩查询"]):
+        return "score"
+
+    if contains_any(text, ["有效期", "多久过期", "过期", "续证", "重认证", "刷新有效期"]):
+        return "recertification"
+
+    if contains_any(
+        text,
+        ["课程", "培训", "学什么", "学习路径", "怎么学", "先学啥", "主要学", "学哪些内容", "学习内容", "课程内容", "主要学什么"],
+    ):
         return "training"
 
-    if contains_any(text, ["适合考哪个证", "推荐哪个证", "考哪个", "怎么选认证"]):
-        return "recommendation"
+    if contains_any(
+        text,
+        [
+            "领证",
+            "拿证",
+            "拿证入口",
+            "领证入口",
+            "电子证书",
+            "下载证书",
+            "证书下载",
+            "下载入口",
+            "证书发放",
+            "证书查询",
+            "证书领取",
+            "领取证书",
+            "证书怎么领",
+            "证书在哪下载",
+            "证书去哪里下载",
+            "证书去哪里领",
+            "通过后证书",
+            "下载电子证书",
+            "查看证书",
+        ],
+    ):
+        return "certificate"
 
-    if contains_any(text, ["是什么", "是干嘛的", "介绍", "有啥用", "有没有用", "适合什么人", "适合谁", "适合人群"]):
+    if contains_any(
+        text,
+        ["是什么", "是干嘛的", "介绍", "有啥用", "有没有用", "适合什么人", "适合谁", "适合人群", "哪些岗位", "适合哪些岗位", "什么岗位", "在职运维", "学生还是在职运维"],
+    ):
         return "intro"
 
     return "unknown"
@@ -98,6 +195,7 @@ def normalize_cert_name(cert_name: str, question_type: str) -> str:
         "score",
         "certificate",
         "recertification",
+        "value",
     }
 
     if cert_name == "H3CNE":
@@ -109,11 +207,17 @@ def normalize_cert_name(cert_name: str, question_type: str) -> str:
     return cert_name
 
 
-def build_missing_fields(cert_name: str, question_type: str) -> List[str]:
+def build_missing_fields(query: str, cert_name: str, question_type: str) -> List[str]:
     missing = []
 
     if question_type == "recommendation":
         missing.extend(["user_background", "target_direction"])
+    elif question_type == "value":
+        missing.append("value_dimension")
+    elif cert_name == "" and question_type == "prerequisite":
+        missing.append("cert_name")
+    elif cert_name == "" and question_type == "registration" and should_clarify_registration_target(query):
+        missing.append("cert_name")
     elif question_type == "unknown" and cert_name == "":
         missing.append("cert_name")
 
@@ -128,10 +232,19 @@ def build_clarify_text(missing_fields: List[str], question_type: str) -> str:
             "2. 你未来想往哪个方向发展（路由交换 / 安全 / 云计算 / 无线）？"
         )
 
+    if question_type == "value":
+        return (
+            "你这里说的“还有用/还有必要考”，可能是在问两件不同的事：\n"
+            "1. 你想问 H3CNE-RS+ 现在值不值得考、对求职或学习有没有帮助；\n"
+            "2. 你想问 H3CNE-RS+ 证书是否还在有效期内、会不会过期。\n"
+            "你更想了解哪一种？"
+        )
+
     field_map = {
         "cert_name": "当前应用主要回答 H3CNE-RS+ 相关问题。如果你想问其他 H3C 认证，请明确认证名称，例如 H3CSE-RS+。",
         "user_background": "请补充你的当前基础情况。",
         "target_direction": "请补充你想发展的技术方向。",
+        "value_dimension": "请补充你更想了解证书价值，还是证书是否仍有效。",
     }
 
     parts = [field_map.get(f, f"请补充字段：{f}") for f in missing_fields]
@@ -145,10 +258,14 @@ def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str
             "H3CNE 是干嘛的",
             "认证介绍",
             "适合人群",
+            "适合哪些岗位",
+            "学生还是在职运维",
         ],
         "prerequisite": [
             "H3CNE 有前置条件吗",
             "H3CNE 必须培训后才能考试吗",
+            "H3CNE 一定要先参加培训吗",
+            "H3CNE 先参加培训才能考试吗",
             "H3CNE 不培训能报名吗",
             "前置条件",
             "报考条件",
@@ -157,8 +274,13 @@ def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str
         "training": [
             "H3CNE 需要先学啥",
             "H3CNE 学什么",
+            "H3CNE 学习内容有哪些",
+            "H3CNE 课程内容有哪些",
             "培训课程",
             "学习路径",
+            "主要学哪些内容",
+            "课程内容",
+            "计算机网络基础 H3C 网络设备操作 局域网交换 IP 路由 SDN",
         ],
         "exam": [
             "H3CNE 的考试代码是什么",
@@ -168,6 +290,7 @@ def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str
             "考试代码",
             "考试代码是什么",
             "考试代码是多少",
+            "exam code",
         ],
         "registration": [
             "H3CNE 去哪里报名",
@@ -176,6 +299,8 @@ def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str
             "报名方式",
             "考试预约",
             "官方入口",
+            "报名入口",
+            "预约平台",
         ],
         "score": [
             "H3CNE 成绩在哪里查询",
@@ -186,9 +311,18 @@ def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str
         "certificate": [
             "H3CNE 证书怎么领取",
             "H3CNE 证书怎么下载",
+            "H3CNE 通过后证书去哪里下载",
+            "H3CNE 证书在哪下载",
+            "H3CNE 证书去哪里下载",
+            "H3CNE 通过后怎么领取电子证书",
             "证书发放",
             "证书查询",
             "证书下载",
+            "拿证入口",
+            "电子证书在哪领",
+            "证书查询与下载入口",
+            "新华三技术认证官微 证书查询",
+            "http://www.h3c.com/CN/BizPortal/TrainingPartner/Tester/AP_Edu_SearchScoreLogin.aspx",
         ],
         "recertification": [
             "H3CNE 怎么重认证",
@@ -202,6 +336,10 @@ def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str
             "适合人群",
             "认证路径",
             "认证介绍",
+            "从哪个认证开始",
+            "从哪个 H3C 证书开始",
+            "认证路线怎么选",
+            "最适合入门",
         ],
         "unknown": [],
     }
@@ -243,12 +381,12 @@ def recognize_intent(query: str) -> Dict:
             "risk_level": "low",
         }
 
-    cert_name = extract_cert_name(query)
+    raw_cert_name = extract_cert_name(query)
     question_type = extract_question_type(query)
 
     if question_type == "high_risk_refuse":
         return {
-            "cert_name": cert_name,
+            "cert_name": raw_cert_name,
             "question_type": question_type,
             "need_clarify": False,
             "missing_fields": [],
@@ -260,8 +398,8 @@ def recognize_intent(query: str) -> Dict:
             "risk_level": "high",
         }
 
-    cert_name = normalize_cert_name(cert_name, question_type)
-    missing_fields = build_missing_fields(cert_name, question_type)
+    cert_name = normalize_cert_name(raw_cert_name, question_type)
+    missing_fields = build_missing_fields(query, raw_cert_name, question_type)
     need_clarify = len(missing_fields) > 0
     clarify_text = build_clarify_text(missing_fields, question_type) if need_clarify else ""
     retrieval_query = build_retrieval_query(cert_name, question_type, query) if not need_clarify else ""
