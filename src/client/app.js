@@ -1,5 +1,5 @@
 const BASE_URL = "http://192.168.1.150/v1";
-const API_KEY = "app-rjhzHid326F2teOn2msQDhXS";
+const API_KEY = "app-eXeHTibIYo0PnVXGjbYZ7U7v";
 const ENDPOINT = `${BASE_URL}/workflows/run`;
 
 const questionInput = document.getElementById("question");
