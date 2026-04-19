@@ -1,6 +1,8 @@
 import re
 from typing import Dict, List
 
+TOPIC_DEFAULT_CERT = "H3CNE-RS+"
+
 
 def contains_any(text: str, keywords: List[str]) -> bool:
     return any(k in text for k in keywords)
@@ -20,7 +22,7 @@ def is_high_risk_refuse_query(text: str) -> bool:
 
 
 def extract_cert_name(text: str) -> str:
-    t = text.upper()
+    t = (text or "").upper()
 
     if "H3CNE-RS+" in t or "H3CNE RS+" in t or "RS+" in t:
         return "H3CNE-RS+"
@@ -52,7 +54,26 @@ def extract_question_type(text: str) -> str:
     if contains_any(text, ["证书", "领证", "下载证书", "证书发放", "证书查询"]):
         return "certificate"
 
-    if contains_any(text, ["前置", "报考条件", "报名条件", "能不能考", "能报吗", "我能报吗", "零基础", "基础要求"]):
+    if contains_any(
+        text,
+        [
+            "前置",
+            "报考条件",
+            "报名条件",
+            "能不能考",
+            "能报吗",
+            "我能报吗",
+            "零基础",
+            "基础要求",
+            "必须培训",
+            "必须先上课",
+            "培训后才能考",
+            "培训后才能考试",
+            "不培训能报名",
+            "自学后报名",
+            "可以自学报名",
+        ],
+    ):
         return "prerequisite"
 
     if contains_any(text, ["课程", "培训", "学什么", "学习路径", "怎么学", "先学啥"]):
@@ -67,10 +88,9 @@ def extract_question_type(text: str) -> str:
     return "unknown"
 
 
-def build_missing_fields(cert_name: str, question_type: str) -> List[str]:
-    missing = []
-
-    if question_type in [
+def normalize_cert_name(cert_name: str, question_type: str) -> str:
+    defaultable_types = {
+        "intro",
         "prerequisite",
         "training",
         "exam",
@@ -78,12 +98,24 @@ def build_missing_fields(cert_name: str, question_type: str) -> List[str]:
         "score",
         "certificate",
         "recertification",
-        "unknown",
-    ] and cert_name == "":
-        missing.append("cert_name")
+    }
+
+    if cert_name == "H3CNE":
+        return TOPIC_DEFAULT_CERT
+
+    if cert_name == "" and question_type in defaultable_types:
+        return TOPIC_DEFAULT_CERT
+
+    return cert_name
+
+
+def build_missing_fields(cert_name: str, question_type: str) -> List[str]:
+    missing = []
 
     if question_type == "recommendation":
         missing.extend(["user_background", "target_direction"])
+    elif question_type == "unknown" and cert_name == "":
+        missing.append("cert_name")
 
     return missing
 
@@ -97,7 +129,7 @@ def build_clarify_text(missing_fields: List[str], question_type: str) -> str:
         )
 
     field_map = {
-        "cert_name": "请先确认你咨询的是哪个认证项目，例如 H3CNE 或 H3CNE-RS+。",
+        "cert_name": "当前应用主要回答 H3CNE-RS+ 相关问题。如果你想问其他 H3C 认证，请明确认证名称，例如 H3CSE-RS+。",
         "user_background": "请补充你的当前基础情况。",
         "target_direction": "请补充你想发展的技术方向。",
     }
@@ -107,25 +139,83 @@ def build_clarify_text(missing_fields: List[str], question_type: str) -> str:
 
 
 def build_retrieval_query(cert_name: str, question_type: str, query: str) -> str:
-    mapping = {
-        "intro": "认证介绍 适合人群",
-        "prerequisite": "前置条件 报考条件 是否需要培训",
-        "training": "培训课程 学习路径",
-        "exam": "考试代码 考试内容",
-        "registration": "报名方式 考试预约 官方入口",
-        "score": "成绩查询 查分方式",
-        "certificate": "证书发放 证书查询 证书下载",
-        "recertification": "证书有效期 重认证 刷新有效期",
-        "recommendation": "适合人群 认证路径 认证介绍",
-        "unknown": "",
+    boost_map = {
+        "intro": [
+            "H3CNE 是什么",
+            "H3CNE 是干嘛的",
+            "认证介绍",
+            "适合人群",
+        ],
+        "prerequisite": [
+            "H3CNE 有前置条件吗",
+            "H3CNE 必须培训后才能考试吗",
+            "H3CNE 不培训能报名吗",
+            "前置条件",
+            "报考条件",
+            "是否需要培训",
+        ],
+        "training": [
+            "H3CNE 需要先学啥",
+            "H3CNE 学什么",
+            "培训课程",
+            "学习路径",
+        ],
+        "exam": [
+            "H3CNE 的考试代码是什么",
+            "H3CNE 的考试代码是多少",
+            "H3CNE考试代码是什么",
+            "H3CNE考试代码是多少",
+            "考试代码",
+            "考试代码是什么",
+            "考试代码是多少",
+        ],
+        "registration": [
+            "H3CNE 去哪里报名",
+            "H3CNE 去哪报",
+            "H3CNE 怎么报名",
+            "报名方式",
+            "考试预约",
+            "官方入口",
+        ],
+        "score": [
+            "H3CNE 成绩在哪里查询",
+            "H3CNE 怎么查成绩",
+            "成绩查询",
+            "查分方式",
+        ],
+        "certificate": [
+            "H3CNE 证书怎么领取",
+            "H3CNE 证书怎么下载",
+            "证书发放",
+            "证书查询",
+            "证书下载",
+        ],
+        "recertification": [
+            "H3CNE 怎么重认证",
+            "H3CNE 到期后怎么办",
+            "H3CNE 到期后是不是只能重考",
+            "证书有效期",
+            "重认证",
+            "刷新有效期",
+        ],
+        "recommendation": [
+            "适合人群",
+            "认证路径",
+            "认证介绍",
+        ],
+        "unknown": [],
     }
 
-    suffix = mapping.get(question_type, "")
-    if cert_name and suffix:
-        return f"{cert_name} {suffix}"
-    if cert_name:
-        return cert_name
-    return query
+    parts = [query, cert_name] + boost_map.get(question_type, [])
+    cleaned: List[str] = []
+    seen = set()
+    for part in parts:
+        part = re.sub(r"\s+", " ", (part or "")).strip()
+        if not part or part in seen:
+            continue
+        seen.add(part)
+        cleaned.append(part)
+    return " ".join(cleaned)
 
 
 def build_refuse_text() -> str:
@@ -170,6 +260,7 @@ def recognize_intent(query: str) -> Dict:
             "risk_level": "high",
         }
 
+    cert_name = normalize_cert_name(cert_name, question_type)
     missing_fields = build_missing_fields(cert_name, question_type)
     need_clarify = len(missing_fields) > 0
     clarify_text = build_clarify_text(missing_fields, question_type) if need_clarify else ""
